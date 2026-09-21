@@ -1,14 +1,14 @@
 <!---
-title: Match Environment Reference Architecture - AWS
+title: Snicket Labs Reference Architecture - AWS
 folder: "Technical Documentation"
 status: 2
 -->
 
-# Match Environment Reference Architecture - AWS
+# Snicket Labs Reference Architecture - AWS
 
 ## Overview
 
-A Terraform-based reference architecture for deploying Match environments on **Amazon EKS**. It provisions an AWS environment suitable for running Match including Kubernetes cluster, database, cache, object storage, shared storage, secrets, autoscaling, and load balancing - onto which the `helm-match` chart is installed.
+A Terraform-based reference architecture for deploying the Snicket Labs system on **Amazon EKS**. It provisions an AWS environment suitable for running the platform including Kubernetes cluster, database, cache, object storage, shared storage, secrets, autoscaling, and load balancing - onto which the platform helm chart is installed.
 
 > **Important Note**: This reference architecture is intended as a **guide and starting point**. You may adapt it to work with your existing infrastructure, including existing EKS clusters, VPCs, or other AWS resources. The architecture is modular and can be customized to integrate with your current setup rather than creating everything from scratch.
 
@@ -125,8 +125,8 @@ Recommended actions:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/ad-signalio/match-reference-architecture.git
-   cd match-reference-architecture
+   git clone https://github.com/snicketlabs/reference-architecture.git
+   cd reference-architecture
    ```
 
 2. **Create environment directory**
@@ -200,7 +200,7 @@ Each environment contains:
 your-environment/
 ├── backend.tf           # Terraform state backend configuration
 ├── main.tf              # Main infrastructure resources
-├── outputs.tf           # Outputs useful info for deploying the match helm chart
+├── outputs.tf           # Outputs useful info for deploying the platform helm chart
 ├── provider.tf          # AWS, Kubernetes, and Helm providers
 ├── variables.tf         # Variable definitions
 └── your-env.tfvars      # Environment-specific values
@@ -221,11 +221,17 @@ This will:
 
 ## Utilising ASCP Quick Start
 
-In order to get the the necessary secrets for the Match application quickly, we have created an _optional_ helm chart: [secrets-configuration](https://github.com/ad-signalio/match-reference-architecture/tree/main/optional-add-ons/secrets-configuration).
+In order to get the necessary secrets for the platform quickly, we have created an _optional_ helm chart, `secrets-configuration-aws`, published to our chart repository:
 
-The chart creates several Kubernetes SecretProviderClass resources that integrate with AWS Secrets Manager, allowing the Match application to securely access secrets stored in AWS without embedding them in the application code or Kubernetes manifests. It also creates a service account that will utilise the IAM role created [here](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-eks/iam.tf).
+```bash
+helm repo add ad-signalio https://ad-signalio.github.io/helm-charts
+helm repo update
+helm install secrets-configuration ad-signalio/secrets-configuration-aws -n match
+```
 
-Please see the chart [README.md](https://github.com/ad-signalio/match-reference-architecture/blob/main/optional-add-ons/secrets-configuration/README.md) for installation instructions.
+The chart creates several Kubernetes SecretProviderClass resources that integrate with AWS Secrets Manager, allowing the platform to securely access secrets stored in AWS without embedding them in the application code or Kubernetes manifests. It also creates a service account that will utilise the IAM role created [here](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-eks/iam.tf).
+
+See the [chart source and README](https://github.com/ad-signalio/helm-charts/tree/main/charts/secrets-configuration-aws) for the full configuration reference.
 
 ## Prerequisites: Manually created secrets 
 
@@ -256,7 +262,7 @@ aws secretsmanager create-secret \
 
 - External DNS installation
 
-You may use your own DNS solution by manually pointing a DNS CNAME at the Load Balancers DNS address once the match helm chart is installed and configured. See the Helm Chart [Readme](https://github.com/ad-signalio/helm-charts/blob/main/charts/match/README.md#dns) for more information. 
+You may use your own DNS solution by manually pointing a DNS CNAME at the Load Balancers DNS address once the platform helm chart is installed and configured. See the Helm Chart [Readme](https://github.com/ad-signalio/helm-charts/blob/main/charts/match/README.md#dns) for more information. 
 
 Optionally if you have a domain in Route53 you can may use our module to install [External DNS](https://kubernetes-sigs.github.io/external-dns/) onto the EKS cluster to create DNS entries for you.
 
@@ -296,7 +302,7 @@ It is recommended you bring your own domain, and manage your own certificates. F
 
 - SMTP creation
 
-Match will send passwords reset links and notifications to users via email if configured with SMTP credentials. This can be done with an SMTP username and password as kubernetes secrets and configured later when the helm chart is installed. 
+The platform will send password reset links and notifications to users via email if configured with SMTP credentials. This can be done with an SMTP username and password as kubernetes secrets and configured later when the helm chart is installed. 
 
 If however an STMP service is required AWS SES can be used to provide SMTP credentials, we have not included this in the example `main.tf`.  
 
@@ -341,7 +347,7 @@ Two variables control which AWS identities are granted `AmazonEKSClusterAdminPol
 | `admin_access_role_names` | `list(string)` | Names of existing IAM roles to grant cluster admin access |
 | `admin_access_sso_permission_set_names` | `list(string)` | Names of existing AWS SSO permission sets to grant cluster admin access |
 
-**These roles and permission sets must already exist in your AWS account.** This match reference architecture does not create them — it only grants them EKS cluster admin access. You are responsible for creating them via your own Terraform, the AWS console, or other IAM tooling.
+**These roles and permission sets must already exist in your AWS account.** This reference architecture does not create them — it only grants them EKS cluster admin access. You are responsible for creating them via your own Terraform, the AWS console, or other IAM tooling.
 
 > **Important:** If neither variable is set, no EKS admin access entries are configured and you will have no `kubectl` access to the cluster. The first `terraform apply` (Stage 1 — AWS infrastructure) will succeed, but without working `kubectl` credentials the second apply (Stage 2 — Kubernetes resources) will fail. You must populate at least one of these variables before running Stage 2.
 
@@ -388,17 +394,17 @@ snicket_labs_remote_lb_access = true
 
 ## Load balancer exposure
 
-Match is published through an Application Load Balancer that the EKS Auto Mode
+The platform is published through an Application Load Balancer that the EKS Auto Mode
 controller creates from the `IngressClassParams` this reference architecture
 manages. Three variables decide who can reach it. Out of the box it is on the
 internet and open to everyone, which is the right starting point for a
 deployment on a domain you own with users spread across the internet, and the
-wrong one if Match should only be reachable from your own networks.
+wrong one if the platform should only be reachable from your own networks.
 
 | Variable | Default | What it does |
 |----------|---------|--------------|
-| `load_balancer_type` | `internet-facing` | `internal` gives the load balancer private addresses only. Nothing outside the VPC — or outside what you have peered or VPN'd to it — can reach Match at all. |
-| `load_balancer_ip_ranges` | `["0.0.0.0/0"]` | The CIDRs written into the load balancer's security group. Narrow this to your own egress ranges to keep Match on the internet but reachable only from your offices, VPN or proxy. |
+| `load_balancer_type` | `internet-facing` | `internal` gives the load balancer private addresses only. Nothing outside the VPC — or outside what you have peered or VPN'd to it — can reach the platform at all. |
+| `load_balancer_ip_ranges` | `["0.0.0.0/0"]` | The CIDRs written into the load balancer's security group. Narrow this to your own egress ranges to keep the platform on the internet but reachable only from your offices, VPN or proxy. |
 | `snicket_labs_remote_lb_access` | `true` | Adds the Snicket Labs support address to that security group. |
 
 ### Restricting access to your own networks
@@ -411,8 +417,8 @@ load_balancer_ip_ranges = [
 ]
 ```
 
-Everything that talks to Match has to be in this list, not just browsers —
-anything calling the Match API, and any system you have integrated with it. A
+Everything that talks to the platform has to be in this list, not just browsers —
+anything calling the platform API, and any system you have integrated with it. A
 range left out is a connection refused, with nothing in the application logs to
 explain it, so gather them before you apply rather than after.
 
