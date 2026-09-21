@@ -7,10 +7,13 @@ name: Guard generated paths
 # It lists what the sync does NOT own, rather than what it does. That list is
 # short, stable, and lives in this repo - listing the managed paths instead
 # would duplicate SYNC_PATHS from the source repo and drift from it.
+#
+# There is deliberately no override. Merging a generated-path change anyway
+# does not make it survive; the next sync still reverts it. An escape hatch
+# here would only move the loss further from the mistake.
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
 
 permissions:
   contents: read
@@ -18,7 +21,6 @@ permissions:
 
 env:
   SYNC_BOT: snicket-public-sync[bot]
-  OVERRIDE_LABEL: override-sync-guard
   # Files this repo owns outright. Anything else is published by the sync.
   LOCALLY_OWNED: '^(LICENSE|CODEOWNERS|CONTRIBUTING\.md|\.github/)'
 
@@ -31,7 +33,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           AUTHOR: ${{ github.event.pull_request.user.login }}
-          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         run: |
           if [ "$AUTHOR" = "$SYNC_BOT" ]; then
             echo "Opened by the sync. Nothing to check."
@@ -46,12 +47,6 @@ jobs:
             exit 0
           fi
 
-          if [[ ",$LABELS," == *",$OVERRIDE_LABEL,"* ]]; then
-            echo "::warning::Generated paths changed, allowed by the $OVERRIDE_LABEL label. The next sync will still revert them."
-            printf '%s\n' "$generated"
-            exit 0
-          fi
-
           {
             echo "### This PR changes generated files"
             echo
@@ -62,8 +57,6 @@ jobs:
             echo
             echo "Make the change in the source repository instead, or open an issue."
             echo "See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md)."
-            echo
-            echo "If you genuinely need to land it here anyway, add the \`$OVERRIDE_LABEL\` label."
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "::error::PR changes generated paths. See the job summary."
