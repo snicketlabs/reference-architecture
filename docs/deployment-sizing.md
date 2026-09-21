@@ -6,7 +6,7 @@ status: 2
 
 # Deployment Sizing Options
 
-This reference architecture includes pre-configured sizing templates (`small`, `medium`, `large`). There are corresponding `small.yaml`, `medium.yaml` and `large.yaml` values in the Match Helm chart that match these capacities. Work with Ad Signal Technical Services to understand your individual system needs.
+This reference architecture includes pre-configured sizing templates (`small`, `medium`, `large`). There are corresponding `small.yaml`, `medium.yaml` and `large.yaml` values in the platform helm chart that match these capacities. Work with Snicket Labs Technical Services to understand your individual system needs.
 
 Across both clouds the dimension that actually changes between profiles is the **managed database** (instance size and storage). Node pools autoscale, and the cache defaults are sensible for most workloads — scale them up for higher-throughput environments.
 

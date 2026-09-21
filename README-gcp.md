@@ -1,14 +1,14 @@
 <!---
-title: Match Environment Reference Architecture - GCP
+title: Snicket Labs Reference Architecture - GCP
 folder: "Technical Documentation"
 status: 2
 -->
 
-# Match Environment Reference Architecture - GCP
+# Snicket Labs Reference Architecture - GCP
 
 ## Overview
 
-A Terraform-based reference architecture for deploying Match environments on **Google Kubernetes Engine (GKE)**. It provisions a GCP environment suitable for running Match including, Kubernetes cluster, database, cache, object storage, shared storage, secrets, autoscaling, and ingress with TLS - onto which the `helm-match` chart is installed.
+A Terraform-based reference architecture for deploying the Snicket Labs system on **Google Kubernetes Engine (GKE)**. It provisions a GCP environment suitable for running the platform including, Kubernetes cluster, database, cache, object storage, shared storage, secrets, autoscaling, and ingress with TLS - onto which the platform helm chart is installed.
 
 > **Important Note**: This reference architecture is intended as a **guide and starting point**. The modules are composable, so you may adapt them to work with an existing project, VPC, or cluster rather than creating everything from scratch.
 
@@ -17,7 +17,7 @@ A Terraform-based reference architecture for deploying Match environments on **G
 - [Prerequisites](#prerequisites)
 - [Required GCP Permissions](#required-gcp-permissions)
 - [Quick Start](#quick-start)
-- [Installing Match (application layer)](#installing-match-application-layer)
+- [Installing the platform (application layer)](#installing-the-platform-application-layer)
 - [Secrets (ESO + Workload Identity)](#secrets-eso--workload-identity)
 - [Shared storage (NFS provisioner vs Filestore)](#shared-storage-nfs-provisioner-vs-filestore)
 - [Ingress, TLS, and DNS](#ingress-tls-and-dns)
@@ -47,7 +47,7 @@ Running `terraform apply` in `environments/gcp/<your-env>/infrastructure` stands
 | Gateway + ClusterIssuer + Certificate | `tf-dt-gke-gateway-tls` | Gateway API ingress with Let's Encrypt TLS |
 | external-dns | `tf-dt-external-dns` | Automatic DNS records for the Gateway |
 
-The infrastructure layer is complete on its own. **Installing Match** is the application layer on top - the ESO secret sync and the `helm-match` chart. See [Installing Match](#installing-match-application-layer).
+The infrastructure layer is complete on its own. **Installing the platform** is the application layer on top - the ESO secret sync and the platform helm chart. See [Installing the platform](#installing-the-platform-application-layer).
 
 ## Prerequisites
 
@@ -85,7 +85,7 @@ Before using this reference architecture, ensure you have:
 | **`gcloud` CLI** | latest | Authentication and Application Default Credentials |
 | **`gke-gcloud-auth-plugin`** | latest | Exec auth for the Kubernetes/Helm providers |
 | **kubectl** | `>= 1.28` | Kubernetes cluster management |
-| **Helm** | `>= 3.0` | Match chart and add-on installation |
+| **Helm** | `>= 3.0` | Platform chart and add-on installation |
 | **Google** | `>= 5.0` | GCP resource management (GKE/Cloud SQL/Memorystore/VPC) |
 | **Kubernetes** | `>= 2.20` | In-cluster resource provisioning |
 | **Helm (provider)** | `>= 2.9` | `helm_release` resources (Gateway/TLS, operators) |
@@ -113,8 +113,8 @@ The principal running Terraform (your user via Application Default Credentials, 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/ad-signalio/match-reference-architecture.git
-   cd match-reference-architecture
+   git clone https://github.com/snicketlabs/reference-architecture.git
+   cd reference-architecture
    ```
 
 2. **Bootstrap the Terraform state bucket.** The GCS state bucket can't be managed by the state it stores, so create it first with local state. See **[Terraform State](./docs/terraform-state.md)** and [`initial-state/gcp/example/README.md`](./initial-state/gcp/example/README.md) for the full bootstrap ordering. In short:
@@ -152,12 +152,12 @@ This is a **single apply** - there is no staged or tiered apply.
 
 > **Note:** The `example` environment is the canonical, committed reference. Copy it per environment, and keep secrets (such as the Cloudflare token) out of committed tfvars - pass them via CI secrets or a gitignored tfvars.
 
-## Installing Match (application layer)
+## Installing the platform (application layer)
 
 The infrastructure apply does **not** install the application. After it completes:
 
 1. **Sync the secrets (ESO + Workload Identity)** into the `match` namespace. The Terraform modules create the *source* secrets in Secret Manager (DB, Redis, GCS-HMAC, API keys, owning-user password); the `eso-support` chart's `SecretStore` and `ExternalSecret`s materialise them as the Kubernetes Secrets the app expects; and two are created manually (`match-docker-secret`, `match-honeybadger-secret`). See [Secrets (ESO + Workload Identity)](#secrets-eso--workload-identity) below for full detail, including the gcloud commands.
-2. **Install the Match app.** Install the `helm-match` chart into `match` with the GCP values: Postgres → `match-postgres-credentials`, Redis → `match-redis`, Active Storage → GCS S3-interop endpoint + `match-s3-credentials`, shared storage → the `match-shared-storage-nfs` RWX class, `kedaAutoScaling.enabled`, `httpRoute.enabled` attaching to the `match-gateway`, and `gke.enabled` for the `/up` HealthCheckPolicy.
+2. **Install the platform.** Install the platform helm chart into `match` with the GCP values: Postgres → `match-postgres-credentials`, Redis → `match-redis`, Active Storage → GCS S3-interop endpoint + `match-s3-credentials`, shared storage → the `match-shared-storage-nfs` RWX class, `kedaAutoScaling.enabled`, `httpRoute.enabled` attaching to the `match-gateway`, and `gke.enabled` for the `/up` HealthCheckPolicy.
 
 ```bash
 helm upgrade --install eso-support <eso-support chart> -n match -f <eso-values>
@@ -182,7 +182,7 @@ The secrets backend used in this reference architecture is **GCP Secret Manager*
 
 - ESO is installed by the `tf-dt-external-secrets` module.
 - Its service account is granted `roles/secretmanager.secretAccessor` via Workload Identity (`tf-dt-workload-identity`), with trust on the Google service account.
-- The [`secrets-configuration/eso-support`](https://github.com/ad-signalio/match-reference-architecture/tree/main/optional-add-ons/secrets-configuration/eso-support) chart provides the `SecretStore` and `ExternalSecret`s that materialise the Kubernetes Secrets the app expects: `match-postgres-credentials`, `match-redis`, `match-api-secrets`, `match-owning-user-credentials`, `dockerconfig`, `honeybadger-api-key`, and `match-s3-credentials`.
+- The [`secrets-configuration-gcp`](https://github.com/ad-signalio/helm-charts/tree/main/charts/secrets-configuration-gcp) chart (`helm repo add ad-signalio https://ad-signalio.github.io/helm-charts`) provides the `SecretStore` and `ExternalSecret`s that materialise the Kubernetes Secrets the app expects: `match-postgres-credentials`, `match-redis`, `match-api-secrets`, `match-owning-user-credentials`, `dockerconfig`, `honeybadger-api-key`, and `match-s3-credentials`.
 
 ### Prerequisites: manually created secrets
 
@@ -240,7 +240,7 @@ module "nfs_provisioner" {
 }
 ```
 
-The chart's `storage.sharedStorage` claim must fit under `backing_disk_size`, so bump the backing disk for anything beyond a smoke test. The corresponding Match values are:
+The chart's `storage.sharedStorage` claim must fit under `backing_disk_size`, so bump the backing disk for anything beyond a smoke test. The corresponding platform values are:
 
 ```yaml
 storage:
@@ -271,7 +271,7 @@ module "filestore" {
 }
 ```
 
-Then point the Match values at the same `match-shared-storage-nfs` StorageClass - the `claimName` (`match-shared-storage`) is unchanged.
+Then point the platform values at the same `match-shared-storage-nfs` StorageClass - the `claimName` (`match-shared-storage`) is unchanged.
 
 > **Permissions gotcha:** Filestore has no per-export gid knob (unlike the NFS provisioner), so pods must write as nonroot via `podSecurityContext.fsGroup: 65532` rather than relying on a matching export gid. Confirm the app can write to `/app/storage` on first deploy.
 
