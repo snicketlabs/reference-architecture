@@ -1,0 +1,70 @@
+name: Guard generated paths
+
+# Most of this repo is published from an internal repository. A change made
+# here to a generated path is reverted by the next sync, so this fails the PR
+# rather than letting someone spend review on work that will vanish.
+#
+# It lists what the sync does NOT own, rather than what it does. That list is
+# short, stable, and lives in this repo - listing the managed paths instead
+# would duplicate SYNC_PATHS from the source repo and drift from it.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  SYNC_BOT: snicket-public-sync[bot]
+  OVERRIDE_LABEL: override-sync-guard
+  # Files this repo owns outright. Anything else is published by the sync.
+  LOCALLY_OWNED: '^(LICENSE|CODEOWNERS|CONTRIBUTING\.md|\.github/)'
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check changed paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          if [ "$AUTHOR" = "$SYNC_BOT" ]; then
+            echo "Opened by the sync. Nothing to check."
+            exit 0
+          fi
+
+          generated=$(gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only \
+            | grep -vE "$LOCALLY_OWNED" || true)
+
+          if [ -z "$generated" ]; then
+            echo "Only locally owned files changed."
+            exit 0
+          fi
+
+          if [[ ",$LABELS," == *",$OVERRIDE_LABEL,"* ]]; then
+            echo "::warning::Generated paths changed, allowed by the $OVERRIDE_LABEL label. The next sync will still revert them."
+            printf '%s\n' "$generated"
+            exit 0
+          fi
+
+          {
+            echo "### This PR changes generated files"
+            echo
+            echo "These paths are published here from an internal repository. The next sync"
+            echo "overwrites them, so this change would be reverted and the work lost:"
+            echo
+            printf '%s\n' "$generated" | sed 's/^/- `/; s/$/`/'
+            echo
+            echo "Make the change in the source repository instead, or open an issue."
+            echo "See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md)."
+            echo
+            echo "If you genuinely need to land it here anyway, add the \`$OVERRIDE_LABEL\` label."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::error::PR changes generated paths. See the job summary."
+          exit 1
