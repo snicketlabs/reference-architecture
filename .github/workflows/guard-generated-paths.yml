@@ -26,6 +26,10 @@ env:
 
 jobs:
   guard:
+    # This name is the string selected as a required status check on main.
+    # Renaming it silently stops the requirement matching anything, which
+    # reads as "no checks configured" rather than as an error.
+    name: Generated paths
     runs-on: ubuntu-latest
     steps:
       - name: Check changed paths
