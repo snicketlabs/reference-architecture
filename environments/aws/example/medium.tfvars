@@ -1,4 +1,4 @@
-# Sample defaults file for match-environment setup
+# Sample defaults file for the reference architecture
 
 # AWS Configuration
 region                 = "us-east-1"
