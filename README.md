@@ -33,3 +33,5 @@ These topics apply to both clouds and are documented once:
 - [Event Driven Autoscaling (KEDA)](./docs/keda.md)
 
 The resultant environment will be suitable for installing the platform helm chart, which runs the Snicket Labs system.
+
+<!-- deliberate edit to a synced file, to prove the guard blocks it -->
