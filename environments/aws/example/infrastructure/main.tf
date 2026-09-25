@@ -115,11 +115,11 @@ check "snicket_labs_remote_lb_access_has_an_effect" {
 }
 
 module "auto_mode_storage_class" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-auto-mode-efs-storage-class/v1.0.2"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-auto-mode-efs-storage-class/v1.0.3"
 }
 
 module "iam_role_for_service_account" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-iam-roles/v1.0.1"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-iam-roles/v1.0.3"
 
   s3_bucket_name             = "${local.cluster_name}-primary"
   env_name                   = module.label.env_name
@@ -138,7 +138,7 @@ module "iam_role_for_service_account" {
 }
 
 module "elasticache_redis" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-elasticache-redis/v1.0.1"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-elasticache-redis/v1.0.2"
 
   env_name        = module.label.env_name
   tags            = merge(module.label.tags, local.prm_tags)
@@ -156,7 +156,7 @@ module "elasticache_redis" {
 }
 
 module "rds-postgres" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-rds-pg/v1.0.2"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-rds-pg/v1.0.5"
 
   env_name               = module.label.env_name
   tags                   = merge(module.label.tags, local.prm_tags)
@@ -176,7 +176,7 @@ module "rds-postgres" {
 }
 
 module "efs" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-efs/v1.0.7"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-efs/v1.0.8"
 
   env_name               = module.label.env_name
   tags                   = merge(module.label.tags, local.prm_tags)
@@ -186,7 +186,7 @@ module "efs" {
 }
 
 module "s3-active-storage" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-s3-active-storage/v1.0.0"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-s3-active-storage/v1.0.1"
 
   env_name = module.label.env_name
   app_url  = local.app_url
