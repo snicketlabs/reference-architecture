@@ -182,7 +182,7 @@ The secrets backend used in this reference architecture is **GCP Secret Manager*
 
 - ESO is installed by the `tf-dt-external-secrets` module.
 - Its service account is granted `roles/secretmanager.secretAccessor` via Workload Identity (`tf-dt-workload-identity`), with trust on the Google service account.
-- The [`secrets-configuration-gcp`](https://github.com/ad-signalio/helm-charts/tree/main/charts/secrets-configuration-gcp) chart (`helm repo add ad-signalio https://ad-signalio.github.io/helm-charts`) provides the `SecretStore` and `ExternalSecret`s that materialise the Kubernetes Secrets the app expects: `match-postgres-credentials`, `match-redis`, `match-api-secrets`, `match-owning-user-credentials`, `dockerconfig`, `honeybadger-api-key`, and `match-s3-credentials`.
+- The [`secrets-configuration-gcp`](https://github.com/snicketlabs/helm-charts/tree/main/charts/secrets-configuration-gcp) chart (`helm repo add snicketlabs https://snicketlabs.github.io/helm-charts`) provides the `SecretStore` and `ExternalSecret`s that materialise the Kubernetes Secrets the app expects: `postgres-credentials`, `<clusterName>-redis`, `api-secrets`, `owning-user-credentials`, `dockerconfig`, `honeybadger-api-key`, and `s3-credentials`.
 
 ### Prerequisites: manually created secrets
 

@@ -224,14 +224,14 @@ This will:
 In order to get the necessary secrets for the platform quickly, we have created an _optional_ helm chart, `secrets-configuration-aws`, published to our chart repository:
 
 ```bash
-helm repo add ad-signalio https://ad-signalio.github.io/helm-charts
+helm repo add snicketlabs https://snicketlabs.github.io/helm-charts
 helm repo update
-helm install secrets-configuration ad-signalio/secrets-configuration-aws -n match
+helm install secrets-configuration snicketlabs/secrets-configuration-aws -n snicketlabs
 ```
 
 The chart creates several Kubernetes SecretProviderClass resources that integrate with AWS Secrets Manager, allowing the platform to securely access secrets stored in AWS without embedding them in the application code or Kubernetes manifests. It also creates a service account that will utilise the IAM role created [here](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-eks/iam.tf).
 
-See the [chart source and README](https://github.com/ad-signalio/helm-charts/tree/main/charts/secrets-configuration-aws) for the full configuration reference.
+See the [chart source and README](https://github.com/snicketlabs/helm-charts/tree/main/charts/secrets-configuration-aws) for the full configuration reference.
 
 ## Prerequisites: Manually created secrets 
 
@@ -262,7 +262,7 @@ aws secretsmanager create-secret \
 
 - External DNS installation
 
-You may use your own DNS solution by manually pointing a DNS CNAME at the Load Balancers DNS address once the platform helm chart is installed and configured. See the Helm Chart [Readme](https://github.com/ad-signalio/helm-charts/blob/main/charts/match/README.md#dns) for more information. 
+You may use your own DNS solution by manually pointing a DNS CNAME at the Load Balancers DNS address once the platform helm chart is installed and configured. See the Helm Chart [Readme](https://github.com/snicketlabs/helm-charts/blob/main/charts/platform/README.md#dns) for more information. 
 
 Optionally if you have a domain in Route53 you can may use our module to install [External DNS](https://kubernetes-sigs.github.io/external-dns/) onto the EKS cluster to create DNS entries for you.
 
