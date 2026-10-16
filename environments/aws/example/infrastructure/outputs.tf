@@ -4,8 +4,8 @@ output "secret_store_role_arn" {
 }
 
 output "redis_secret_name" {
-  description = "Name of the AWS Secrets Manager secret for Redis."
-  value       = module.elasticache_redis.redis_secret_name
+  description = "Name of the AWS Secrets Manager secret for Redis. Null when enable_redis is false."
+  value       = var.enable_redis ? module.elasticache_redis[0].redis_secret_name : null
 }
 
 output "rds_pg_secret_name" {
@@ -121,7 +121,7 @@ output "grafana_cloudwatch_role_arn" {
 
 output "redis_url" {
   description = "Connection URL for the primary endpoint. Prefer reading the synced k8s secret in the chart (sidekiq.redisServerSecret) over pasting this into a values file."
-  value       = module.elasticache_redis.redis_url
+  value       = var.enable_redis ? module.elasticache_redis[0].redis_url : null
 }
 
 output "database_name" {

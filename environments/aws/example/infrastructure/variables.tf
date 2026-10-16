@@ -180,3 +180,9 @@ variable "snicket_labs_remote_lb_access" {
   type        = bool
   default     = true
 }
+
+variable "enable_redis" {
+  description = "Create ElastiCache for Redis. Only an application still on Sidekiq needs it; GoodJob keeps its queue in RDS. The values-builder template still renders Sidekiq settings, so it refuses an environment without Redis until it moves to GoodJob."
+  type        = bool
+  default     = true
+}
