@@ -137,8 +137,11 @@ module "iam_role_for_service_account" {
   secret_naming_convention = module.label.env_name
 }
 
+# Only for an application still on Sidekiq: GoodJob keeps its queue in RDS.
+# See enable_redis.
 module "elasticache_redis" {
   source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-elasticache-redis/v1.0.2"
+  count  = var.enable_redis ? 1 : 0
 
   env_name        = module.label.env_name
   tags            = merge(module.label.tags, local.prm_tags)
@@ -202,10 +205,14 @@ module "application-secrets" {
 }
 
 module "secret_provider_classes" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks-secret-provider-classes/v1.0.0"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks-secret-provider-classes/v1.0.3"
 
   depends_on = [module.eks]
   enabled    = true
+
+  # The first chart that can leave Redis out (redis.enabled). The module still
+  # defaults to 0.2.0.
+  chart_version = "0.3.0"
 
   # Owns the match namespace, so keda's create_match_namespace is false: these
   # secrets have to exist before anything that consumes them.
@@ -217,7 +224,8 @@ module "secret_provider_classes" {
   api_secret_name    = module.application-secrets.api_secret_name
   user_secret_name   = module.application-secrets.user_secret_name
   rds_pg_secret_name = module.rds-postgres.rds_pg_secret_name
-  redis_secret_name  = module.elasticache_redis.redis_secret_name
+  # Empty leaves the Redis SecretProviderClass out.
+  redis_secret_name = var.enable_redis ? module.elasticache_redis[0].redis_secret_name : ""
 }
 
 module "keda" {

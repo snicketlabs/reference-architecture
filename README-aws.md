@@ -166,7 +166,7 @@ Recommended actions:
 
    This architecture manages both AWS resources and Kubernetes resources (storage classes, ingress, KEDA) in a single Terraform configuration. On first deployment the Kubernetes provider cannot authenticate until the EKS cluster exists, so a **two-stage apply** is required.
 
-   **Stage 1 — AWS infrastructure** (EKS cluster, VPC, RDS, Redis, S3, IAM):
+   **Stage 1 — AWS infrastructure** (EKS cluster, VPC, RDS, Redis unless `enable_redis = false`, S3, IAM):
    ```bash
    terraform init
    terraform apply -var-file="your-company-name.tfvars" \
@@ -214,7 +214,7 @@ The current infrastructure has secret creation "baked in" at different stages.
 
 This will:
 - [Create an IAM policy](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-eks/iam.tf) to allow access to specific secrets (`match-docker-secret` and secrets beginning with your chosen secret naming convention)
-- Inject the [elasticache config details](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-elasticache-redis/main.tf) into a secret in AWS Secrets Manager after creation
+- Inject the [elasticache config details](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-elasticache-redis/main.tf) into a secret in AWS Secrets Manager after creation. ElastiCache is only created with `enable_redis = true` (the default); an application on GoodJob keeps its queue in RDS and needs no Redis
 - Inject the [RDS config details](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-rds-pg/main.tf) into a secret in AWS Secrets Manager after creation
 - Create and inject [Owning User Credentials](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-application-secrets/main.tf) (the credentials you will log in to the product with). The user name will be the email you specify in the `owning_user_email` variable. Password will be auto generated and stored.
 - Create and inject [API secrets](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-application-secrets/main.tf) (necessary for the code to run) into a secret in AWS Secrets Manager after creation
