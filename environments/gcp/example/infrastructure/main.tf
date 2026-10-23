@@ -94,9 +94,11 @@ module "cloud_sql" {
   depends_on = [module.vpc]
 }
 
-#  BASIC tier, 1 GiB.
+#  BASIC tier, 1 GiB. Only for an application still on Sidekiq: GoodJob keeps
+#  its queue in Cloud SQL. See enable_redis.
 module "memorystore" {
   source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=gcp/tf-hosted-modules/tf-dt-memorystore/v1.0.0"
+  count  = var.enable_redis ? 1 : 0
 
   project_id     = var.gcp_project_id
   env_name       = var.env_id

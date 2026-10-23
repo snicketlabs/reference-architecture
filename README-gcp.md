@@ -36,7 +36,7 @@ Running `terraform apply` in `environments/gcp/<your-env>/infrastructure` stands
 | VPC + subnets + Cloud NAT + PSA | `tf-dt-vpc` | Network foundation, including the Private Service Access range for Cloud SQL and Memorystore |
 | GKE cluster (regional, private nodes, Workload Identity, Gateway API) | `tf-dt-gke` | Managed Kubernetes |
 | Cloud SQL for PostgreSQL (private IP) | `tf-dt-cloud-sql` | Application database |
-| Memorystore for Redis (private IP) | `tf-dt-memorystore` | Sidekiq and cache |
+| Memorystore for Redis (private IP) | `tf-dt-memorystore` | Sidekiq. Optional: skipped with `enable_redis = false`, for an application on GoodJob |
 | GCS bucket + HMAC key | `tf-dt-gcs-active-storage` | Active Storage object store (S3-interop) |
 | Shared RWX storage | `tf-dt-nfs-provisioner` | `ReadWriteMany` storage for the pipeline (internal/test default). For production, swap in `tf-dt-filestore` - see below |
 | Workload Identity GSAs | `tf-dt-workload-identity` | Keyless GCP authentication for the app and ESO |
@@ -156,7 +156,7 @@ This is a **single apply** - there is no staged or tiered apply.
 
 The infrastructure apply does **not** install the application. After it completes:
 
-1. **Sync the secrets (ESO + Workload Identity)** into the `match` namespace. The Terraform modules create the *source* secrets in Secret Manager (DB, Redis, GCS-HMAC, API keys, owning-user password); the `eso-support` chart's `SecretStore` and `ExternalSecret`s materialise them as the Kubernetes Secrets the app expects; and two are created manually (`match-docker-secret`, `match-honeybadger-secret`). See [Secrets (ESO + Workload Identity)](#secrets-eso--workload-identity) below for full detail, including the gcloud commands.
+1. **Sync the secrets (ESO + Workload Identity)** into the `match` namespace. The Terraform modules create the *source* secrets in Secret Manager (DB, Redis unless `enable_redis = false`, GCS-HMAC, API keys, owning-user password); the `eso-support` chart's `SecretStore` and `ExternalSecret`s materialise them as the Kubernetes Secrets the app expects; and two are created manually (`match-docker-secret`, `match-honeybadger-secret`). See [Secrets (ESO + Workload Identity)](#secrets-eso--workload-identity) below for full detail, including the gcloud commands.
 2. **Install the platform.** Install the platform helm chart into `match` with the GCP values: Postgres → `match-postgres-credentials`, Redis → `match-redis`, Active Storage → GCS S3-interop endpoint + `match-s3-credentials`, shared storage → the `match-shared-storage-nfs` RWX class, `kedaAutoScaling.enabled`, `httpRoute.enabled` attaching to the `match-gateway`, and `gke.enabled` for the `/up` HealthCheckPolicy.
 
 ```bash
@@ -174,7 +174,7 @@ The secrets backend used in this reference architecture is **GCP Secret Manager*
 ### Created by Terraform ("baked in")
 
 - **Cloud SQL** connection details - written to Secret Manager by `tf-dt-cloud-sql`.
-- **Memorystore** connection details - written by `tf-dt-memorystore`.
+- **Memorystore** connection details - written by `tf-dt-memorystore`, unless `enable_redis = false`. Without Redis, set `redis.enabled: false` on the `secrets-configuration-gcp` chart (0.3.0 or later) so it does not look for them.
 - **API secrets and owning-user password** - created by `tf-dt-application-secrets`.
 - **GCS HMAC key** - minted by `tf-dt-gcs-active-storage` (`create_hmac_key`), providing the Active Storage S3-interop credentials.
 
@@ -182,7 +182,7 @@ The secrets backend used in this reference architecture is **GCP Secret Manager*
 
 - ESO is installed by the `tf-dt-external-secrets` module.
 - Its service account is granted `roles/secretmanager.secretAccessor` via Workload Identity (`tf-dt-workload-identity`), with trust on the Google service account.
-- The [`secrets-configuration-gcp`](https://github.com/snicketlabs/helm-charts/tree/main/charts/secrets-configuration-gcp) chart (`helm repo add snicketlabs https://snicketlabs.github.io/helm-charts`) provides the `SecretStore` and `ExternalSecret`s that materialise the Kubernetes Secrets the app expects: `postgres-credentials`, `<clusterName>-redis`, `api-secrets`, `owning-user-credentials`, `dockerconfig`, `honeybadger-api-key`, and `s3-credentials`.
+- The [`secrets-configuration-gcp`](https://github.com/snicketlabs/helm-charts/tree/main/charts/secrets-configuration-gcp) chart (`helm repo add snicketlabs https://snicketlabs.github.io/helm-charts`) provides the `SecretStore` and `ExternalSecret`s that materialise the Kubernetes Secrets the app expects: `postgres-credentials`, `api-secrets`, `owning-user-credentials`, `dockerconfig`, `honeybadger-api-key`, `s3-credentials`, and `<clusterName>-redis` while `redis.enabled` is on.
 
 ### Prerequisites: manually created secrets
 
