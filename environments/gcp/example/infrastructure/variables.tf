@@ -81,3 +81,9 @@ variable "cloudflare_api_token" {
   default     = ""
   sensitive   = true
 }
+
+variable "enable_redis" {
+  description = "Create Memorystore for Redis. Only an application still on Sidekiq needs it; GoodJob keeps its queue in Cloud SQL. With this off, install secrets-configuration-gcp 0.3.0+ with redis.enabled: false, or its redis ExternalSecret has nothing to read."
+  type        = bool
+  default     = true
+}
