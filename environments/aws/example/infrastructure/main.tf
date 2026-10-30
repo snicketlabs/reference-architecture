@@ -64,7 +64,7 @@ locals {
 }
 
 module "vpc" {
-  source                  = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-vpc/v1.0.0"
+  source                  = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-vpc/v1.0.1"
   env_name                = module.label.env_name
   tags                    = merge(module.label.tags, local.prm_tags)
   cidr                    = var.cidr
@@ -72,18 +72,33 @@ module "vpc" {
 }
 
 module "eks" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks/v1.0.16"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks/v1.0.21"
 
-  env_name                 = module.label.env_name
-  tags                     = merge(module.label.tags, local.prm_tags)
-  subnets_in_az            = tolist(local.subnets_in_az)
-  iam_role_use_name_prefix = false
-  vpc_id                   = module.vpc.vpc
-  private_subnet_ids       = module.vpc.private_subnets
-  vpc_cidr_block           = var.cidr
+  env_name           = module.label.env_name
+  tags               = merge(module.label.tags, local.prm_tags)
+  kubernetes_version = var.kubernetes_version
+  ascp_addon_version = var.ascp_addon_version
+
+  # False for the stage-1 apply only: these addons are Deployments terraform
+  # waits on, and they need compute to become healthy. See the Quick Start in
+  # README-aws.md.
+  create_compute_dependent_addons = var.create_compute_dependent_addons
+  subnets_in_az                   = tolist(local.subnets_in_az)
+  vpc_id                          = module.vpc.vpc
+  private_subnet_ids              = module.vpc.private_subnets
+  vpc_cidr_block                  = var.cidr
 
   secret_naming_convention = module.label.env_name
   access_entries           = merge(local.infra_admin_roles, local.infra_admin_sso_permission_sets)
+
+  # The service account secret_provider_classes creates, which reads Secrets
+  # Manager through this module's secrets role.
+  secret_sync_namespace_service_accounts = ["${var.k8s_namespace}:secret-sync-sa"]
+
+  # EKS Auto Mode's built-in "system" and "general-purpose" node pools, which are
+  # this cluster's only compute. The module defaults to false, expecting custom
+  # node pools in their place.
+  use_builtin_node_pools = true
 
 }
 
@@ -119,7 +134,7 @@ module "auto_mode_storage_class" {
 }
 
 module "iam_role_for_service_account" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-iam-roles/v1.0.3"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-iam-roles/v1.0.5"
 
   s3_bucket_name             = "${local.cluster_name}-primary"
   env_name                   = module.label.env_name
@@ -130,33 +145,10 @@ module "iam_role_for_service_account" {
   kubernetes_service_account = "adsignal-match"
   domain_name                = var.external_domain
   adsignal_org               = "autoingest"
-  ## if you don't wish to allow access to AWS Secret Manager,
-  ## set allow_aws_secret_manager_access to false
-  ## allow_aws_secret_manager_access = false
-  ## and remove secret_naming_convention var
-  secret_naming_convention = module.label.env_name
-}
-
-module "elasticache_redis" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-elasticache-redis/v1.0.2"
-
-  env_name        = module.label.env_name
-  tags            = merge(module.label.tags, local.prm_tags)
-  vpc             = module.vpc.vpc
-  az              = var.availability_zone_name
-  private_subnets = module.vpc.private_subnets
-  cidr_block      = module.vpc.vpc_cidr_block
-  ## if you don't wish to allow access to AWS Secret Manager,
-  ## set create_aws_secret to false
-  ## create_aws_secret = false
-  ## and remove secret_naming_convention var
-  secret_naming_convention = module.label.env_name
-
-  depends_on = [module.eks]
 }
 
 module "rds-postgres" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-rds-pg/v1.0.5"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-rds-pg/v1.0.7"
 
   env_name               = module.label.env_name
   tags                   = merge(module.label.tags, local.prm_tags)
@@ -173,16 +165,6 @@ module "rds-postgres" {
   depends_on               = [module.eks]
 
   deletion_protection = false
-}
-
-module "efs" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-efs/v1.0.8"
-
-  env_name               = module.label.env_name
-  tags                   = merge(module.label.tags, local.prm_tags)
-  cluster_name_prefix    = local.cluster_name
-  private_subnets        = module.vpc.private_subnets_detail
-  vpc_security_group_ids = [module.eks.eks_cluster_node_sg, module.eks.cluster_primary_security_group_id, module.eks.cluster_security_group_id]
 }
 
 module "s3-active-storage" {
@@ -202,13 +184,14 @@ module "application-secrets" {
 }
 
 module "secret_provider_classes" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks-secret-provider-classes/v1.0.0"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks-secret-provider-classes/v1.0.4"
 
   depends_on = [module.eks]
   enabled    = true
 
-  # Owns the match namespace, so keda's create_match_namespace is false: these
-  # secrets have to exist before anything that consumes them.
+  # Owns the application namespace, so keda's create_match_namespace is false:
+  # these secrets have to exist before anything that consumes them.
+  namespace        = var.k8s_namespace
   create_namespace = true
 
   cluster_name          = module.eks.eks_cluster_name
@@ -217,14 +200,14 @@ module "secret_provider_classes" {
   api_secret_name    = module.application-secrets.api_secret_name
   user_secret_name   = module.application-secrets.user_secret_name
   rds_pg_secret_name = module.rds-postgres.rds_pg_secret_name
-  redis_secret_name  = module.elasticache_redis.redis_secret_name
 }
 
 module "keda" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=generic/tf-hosted-modules/tf-dt-keda/v1.0.5"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=generic/tf-hosted-modules/tf-dt-keda/v1.0.6"
 
   depends_on              = [module.eks]
   enabled                 = var.install_helm_charts
   install_crds_separately = false
   create_match_namespace  = false
+  application_namespace   = var.k8s_namespace
 }

@@ -3,11 +3,6 @@ output "secret_store_role_arn" {
   value       = module.eks.secrets_csi_irsa_role_arn
 }
 
-output "redis_secret_name" {
-  description = "Name of the AWS Secrets Manager secret for Redis."
-  value       = module.elasticache_redis.redis_secret_name
-}
-
 output "rds_pg_secret_name" {
   description = "Name of the AWS Secrets Manager secret for RDS Postgres."
   value       = module.rds-postgres.rds_pg_secret_name
@@ -90,8 +85,8 @@ output "load_balancer_ip_ranges" {
 ###############################################################################
 
 output "shared_storage_class_name" {
-  description = "EFS-backed StorageClass for the shared ReadWriteMany volume the workers write to. -> storage.sharedStorage.storageClassName"
-  value       = module.efs.storage_class_name
+  description = "Always null: the example has no shared storage (no EFS). Present-and-null is how values-builder is told so, and it renders storage.sharedStorage disabled."
+  value       = null
 }
 
 output "block_storage_class_name" {
@@ -119,11 +114,6 @@ output "grafana_cloudwatch_role_arn" {
   value       = module.iam_role_for_service_account.grafana_cloudwatch_role_arn
 }
 
-output "redis_url" {
-  description = "Connection URL for the primary endpoint. Prefer reading the synced k8s secret in the chart (sidekiq.redisServerSecret) over pasting this into a values file."
-  value       = module.elasticache_redis.redis_url
-}
-
 output "database_name" {
   description = "-> postgres.database"
   value       = module.rds-postgres.db_name
@@ -146,7 +136,12 @@ output "database_port" {
   value       = module.rds-postgres.db_port
 }
 
+output "database_host" {
+  description = "-> kedaAutoScaling.postgres.host. KEDA needs the host as a literal; the app itself reads it from the synced secret."
+  value       = module.rds-postgres.db_host
+}
+
 output "k8s_secret_names" {
-  description = "Kubernetes Secrets the CSI driver syncs Secrets Manager into -> postgres.*Secret, sidekiq.redis*Secret. These, not rds_pg_secret_name / redis_secret_name, are what the chart is told: those two are the Secrets Manager names, and differ."
+  description = "Kubernetes Secrets the CSI driver syncs Secrets Manager into -> postgres.*Secret. These, not rds_pg_secret_name, are what the chart is told: that is the Secrets Manager name, and differs."
   value       = module.secret_provider_classes.k8s_secret_names
 }

@@ -37,8 +37,9 @@ This reference architecture deploys a complete AWS infrastructure stack includin
 - **IAM Roles & Policies** - Least-privilege access controls
 - **Load Balancer Controller** - AWS Application Load Balancer integration
 - **KEDA** - Event-driven autoscaler for Kubernetes workloads
-- **EFS** - EFS Volumes for use as shared storage on the EKS cluster
 - **Monitoring & Logging** - CloudWatch integration and observability stack
+
+The platform chart runs its jobs on GoodJob, which keeps its queue in RDS. There is no shared storage (EFS).
 
 ## Prerequisites
 
@@ -166,7 +167,10 @@ Recommended actions:
 
    This architecture manages both AWS resources and Kubernetes resources (storage classes, ingress, KEDA) in a single Terraform configuration. On first deployment the Kubernetes provider cannot authenticate until the EKS cluster exists, so a **two-stage apply** is required.
 
-   **Stage 1 — AWS infrastructure** (EKS cluster, VPC, RDS, Redis, S3, IAM):
+   **Stage 1 — AWS infrastructure** (EKS cluster, VPC, RDS, S3, IAM):
+
+   `create_compute_dependent_addons=false` holds back the metrics-server and aws-efs-csi-driver add-ons. Both are Deployments that Terraform waits on until they are healthy, and stage 2 creates them.
+
    ```bash
    terraform init
    terraform apply -var-file="your-company-name.tfvars" \
@@ -174,7 +178,6 @@ Recommended actions:
      -target=module.vpc \
      -target=module.eks \
      -target=module.iam_role_for_service_account \
-     -target=module.elasticache_redis \
      -target=module.rds-postgres \
      -target=module.s3-active-storage \
      -target=module.application-secrets
@@ -214,7 +217,6 @@ The current infrastructure has secret creation "baked in" at different stages.
 
 This will:
 - [Create an IAM policy](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-eks/iam.tf) to allow access to specific secrets (`match-docker-secret` and secrets beginning with your chosen secret naming convention)
-- Inject the [elasticache config details](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-elasticache-redis/main.tf) into a secret in AWS Secrets Manager after creation
 - Inject the [RDS config details](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-rds-pg/main.tf) into a secret in AWS Secrets Manager after creation
 - Create and inject [Owning User Credentials](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-application-secrets/main.tf) (the credentials you will log in to the product with). The user name will be the email you specify in the `owning_user_email` variable. Password will be auto generated and stored.
 - Create and inject [API secrets](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-application-secrets/main.tf) (necessary for the code to run) into a secret in AWS Secrets Manager after creation
@@ -327,10 +329,13 @@ If however an STMP service is required AWS SES can be used to provide SMTP crede
 | `rds_max_allocated_storage` | Maximum storage in GB RDS autoscaling can grow to | `100` | `200`, `500` |
 | **Application Configuration** |
 | `external_domain` | Application domain | `example.sbox.as-priv.net` | `myapp.prod.as-priv.net` |
-| `k8s_namespace` | Kubernetes namespace | `match` | `match` |
+| `k8s_namespace` | Kubernetes namespace | `snicketlabs` | `snicketlabs` |
 | **EKS Configuration** |
 | `admin_access_role_names` | Names of pre-existing IAM roles to grant EKS cluster admin access. See [EKS Admin Access](#eks-admin-access). | `[]` | `["Infra", "DevOps"]` |
 | `admin_access_sso_permission_set_names` | Names of pre-existing SSO permission sets to grant EKS cluster admin access. See [EKS Admin Access](#eks-admin-access). | `[]` | `["infra", "developer"]` |
+| `kubernetes_version` | EKS control plane version. EKS upgrades one minor version at a time, so raise it one step per apply. | `1.36` | `1.35` |
+| `ascp_addon_version` | AWS Secrets Store CSI Driver Provider (ASCP) add-on version. Pinned, unlike the other add-ons. | `v3.1.3-eksbuild.1` | `v3.1.4-eksbuild.1` |
+| `create_compute_dependent_addons` | Create the metrics-server and aws-efs-csi-driver add-ons. Set to `false` only for the stage-1 apply; see [Quick Start](#quick-start). | `true` | `false` |
 | **Load Balancer Exposure** |
 | `load_balancer_type` | Whether the load balancer faces the internet or only your VPC. See [Load balancer exposure](#load-balancer-exposure). | `internet-facing` | `internal` |
 | `load_balancer_ip_ranges` | CIDRs allowed to reach the load balancer. See [Load balancer exposure](#load-balancer-exposure). | `["0.0.0.0/0"]` | `["203.0.113.0/24"]` |

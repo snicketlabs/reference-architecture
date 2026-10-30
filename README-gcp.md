@@ -33,10 +33,9 @@ Running `terraform apply` in `environments/gcp/<your-env>/infrastructure` stands
 
 | Component | Module | Purpose |
 |---|---|---|
-| VPC + subnets + Cloud NAT + PSA | `tf-dt-vpc` | Network foundation, including the Private Service Access range for Cloud SQL and Memorystore |
+| VPC + subnets + Cloud NAT + PSA | `tf-dt-vpc` | Network foundation, including the Private Service Access range for Cloud SQL |
 | GKE cluster (regional, private nodes, Workload Identity, Gateway API) | `tf-dt-gke` | Managed Kubernetes |
 | Cloud SQL for PostgreSQL (private IP) | `tf-dt-cloud-sql` | Application database |
-| Memorystore for Redis (private IP) | `tf-dt-memorystore` | Sidekiq and cache |
 | GCS bucket + HMAC key | `tf-dt-gcs-active-storage` | Active Storage object store (S3-interop) |
 | Shared RWX storage | `tf-dt-nfs-provisioner` | `ReadWriteMany` storage for the pipeline (internal/test default). For production, swap in `tf-dt-filestore` - see below |
 | Workload Identity GSAs | `tf-dt-workload-identity` | Keyless GCP authentication for the app and ESO |
@@ -65,7 +64,7 @@ Before using this reference architecture, ensure you have:
    gcloud services enable serviceusage.googleapis.com \
      cloudresourcemanager.googleapis.com --project <PROJECT_ID>
    ```
-   The modules then enable `compute`, `container`, `sqladmin`, `redis`, `servicenetworking`, `secretmanager`, and others as needed.
+   The modules then enable `compute`, `container`, `sqladmin`, `servicenetworking`, `secretmanager`, and others as needed.
 4. **`gke-gcloud-auth-plugin`** on your PATH. Terraform's Kubernetes and Helm providers use it (exec auth) to reach the cluster:
    ```bash
    gcloud components install gke-gcloud-auth-plugin
@@ -86,7 +85,7 @@ Before using this reference architecture, ensure you have:
 | **`gke-gcloud-auth-plugin`** | latest | Exec auth for the Kubernetes/Helm providers |
 | **kubectl** | `>= 1.28` | Kubernetes cluster management |
 | **Helm** | `>= 3.0` | Platform chart and add-on installation |
-| **Google** | `>= 5.0` | GCP resource management (GKE/Cloud SQL/Memorystore/VPC) |
+| **Google** | `>= 5.0` | GCP resource management (GKE/Cloud SQL/VPC) |
 | **Kubernetes** | `>= 2.20` | In-cluster resource provisioning |
 | **Helm (provider)** | `>= 2.9` | `helm_release` resources (Gateway/TLS, operators) |
 
@@ -99,7 +98,6 @@ The principal running Terraform (your user via Application Default Credentials, 
 - GKE cluster creation and management (`roles/container.admin`)
 - Compute / VPC networking, including Cloud NAT and static IPs (`roles/compute.admin`)
 - Cloud SQL instance management (`roles/cloudsql.admin`)
-- Memorystore for Redis management (`roles/redis.admin`)
 - GCS bucket and HMAC key operations (`roles/storage.admin`)
 - Secret Manager (`roles/secretmanager.admin`)
 - Service account creation and Workload Identity bindings (`roles/iam.serviceAccountAdmin`, `roles/iam.workloadIdentityPoolAdmin`)
@@ -156,8 +154,8 @@ This is a **single apply** - there is no staged or tiered apply.
 
 The infrastructure apply does **not** install the application. After it completes:
 
-1. **Sync the secrets (ESO + Workload Identity)** into the `match` namespace. The Terraform modules create the *source* secrets in Secret Manager (DB, Redis, GCS-HMAC, API keys, owning-user password); the `eso-support` chart's `SecretStore` and `ExternalSecret`s materialise them as the Kubernetes Secrets the app expects; and two are created manually (`match-docker-secret`, `match-honeybadger-secret`). See [Secrets (ESO + Workload Identity)](#secrets-eso--workload-identity) below for full detail, including the gcloud commands.
-2. **Install the platform.** Install the platform helm chart into `match` with the GCP values: Postgres → `match-postgres-credentials`, Redis → `match-redis`, Active Storage → GCS S3-interop endpoint + `match-s3-credentials`, shared storage → the `match-shared-storage-nfs` RWX class, `kedaAutoScaling.enabled`, `httpRoute.enabled` attaching to the `match-gateway`, and `gke.enabled` for the `/up` HealthCheckPolicy.
+1. **Sync the secrets (ESO + Workload Identity)** into the `match` namespace. The Terraform modules create the *source* secrets in Secret Manager (DB, GCS-HMAC, API keys, owning-user password); the `eso-support` chart's `SecretStore` and `ExternalSecret`s materialise them as the Kubernetes Secrets the app expects; and two are created manually (`match-docker-secret`, `match-honeybadger-secret`). See [Secrets (ESO + Workload Identity)](#secrets-eso--workload-identity) below for full detail, including the gcloud commands.
+2. **Install the platform.** Install the platform helm chart into `match` with the GCP values: Postgres → `match-postgres-credentials`, Active Storage → GCS S3-interop endpoint + `match-s3-credentials`, shared storage → the `match-shared-storage-nfs` RWX class, `kedaAutoScaling.enabled`, `httpRoute.enabled` attaching to the `match-gateway`, and `gke.enabled` for the `/up` HealthCheckPolicy.
 
 ```bash
 helm upgrade --install eso-support <eso-support chart> -n match -f <eso-values>
@@ -174,7 +172,6 @@ The secrets backend used in this reference architecture is **GCP Secret Manager*
 ### Created by Terraform ("baked in")
 
 - **Cloud SQL** connection details - written to Secret Manager by `tf-dt-cloud-sql`.
-- **Memorystore** connection details - written by `tf-dt-memorystore`.
 - **API secrets and owning-user password** - created by `tf-dt-application-secrets`.
 - **GCS HMAC key** - minted by `tf-dt-gcs-active-storage` (`create_hmac_key`), providing the Active Storage S3-interop credentials.
 
@@ -182,7 +179,7 @@ The secrets backend used in this reference architecture is **GCP Secret Manager*
 
 - ESO is installed by the `tf-dt-external-secrets` module.
 - Its service account is granted `roles/secretmanager.secretAccessor` via Workload Identity (`tf-dt-workload-identity`), with trust on the Google service account.
-- The [`secrets-configuration-gcp`](https://github.com/snicketlabs/helm-charts/tree/main/charts/secrets-configuration-gcp) chart (`helm repo add snicketlabs https://snicketlabs.github.io/helm-charts`) provides the `SecretStore` and `ExternalSecret`s that materialise the Kubernetes Secrets the app expects: `postgres-credentials`, `<clusterName>-redis`, `api-secrets`, `owning-user-credentials`, `dockerconfig`, `honeybadger-api-key`, and `s3-credentials`.
+- The [`secrets-configuration-gcp`](https://github.com/snicketlabs/helm-charts/tree/main/charts/secrets-configuration-gcp) chart (`helm repo add snicketlabs https://snicketlabs.github.io/helm-charts`) provides the `SecretStore` and `ExternalSecret`s that materialise the Kubernetes Secrets the app expects: `postgres-credentials`, `api-secrets`, `owning-user-credentials`, `dockerconfig`, `honeybadger-api-key`, and `s3-credentials`.
 
 ### Prerequisites: manually created secrets
 
@@ -311,14 +308,14 @@ Set these in `<your-env>.tfvars` (see `environments/gcp/example/infrastructure/v
 | `acme_email` | when TLS | `infra@acme.com` | ACME account email (set via CI secret) |
 | `cloudflare_api_token` | when TLS | _(secret)_ | `Zone:DNS:Edit`; prefer a CI secret or gitignored tfvars |
 
-For sizing guidance (machine types, Cloud SQL tiers, Memorystore), see [Deployment Sizing Options](./docs/deployment-sizing.md). For autoscaling, see [Event Driven Autoscaling (KEDA)](./docs/keda.md).
+For sizing guidance (machine types, Cloud SQL tiers), see [Deployment Sizing Options](./docs/deployment-sizing.md). For autoscaling, see [Event Driven Autoscaling (KEDA)](./docs/keda.md).
 
 ## Teardown
 
 `terraform destroy` works, with a few GCP quirks worth documenting for a *used* cluster:
 
 1. **Operator Helm releases** can hang on uninstall due to finalizer deadlocks. Before destroy, `terraform state rm` the operator releases (cert-manager, external-secrets, keda) - they are removed with the cluster anyway. Keep `gateway_tls` in state (graceful Gateway removal cleans up the LB and NEGs) and `nfs_provisioner` (which reclaims its disk).
-2. **PSA peering** reports "producer services still using" for a few minutes after Cloud SQL and Memorystore are deleted. Run `terraform state rm module.vpc.google_service_networking_connection.psa` and `gcloud compute networks peerings delete servicenetworking-googleapis-com --network=<env>`, then `terraform destroy -target=module.vpc`.
+2. **PSA peering** reports "producer services still using" for a few minutes after Cloud SQL is deleted. Run `terraform state rm module.vpc.google_service_networking_connection.psa` and `gcloud compute networks peerings delete servicenetworking-googleapis-com --network=<env>`, then `terraform destroy -target=module.vpc`.
 3. **Dynamically-provisioned PVs** can orphan as `pvc-*` disks - sweep them with `gcloud compute disks list` / `delete`.
 
 The following persist by design and are not Terraform-managed: the state bucket, the WIF/CI config, and the manually-created Secret Manager secrets.
