@@ -15,7 +15,7 @@ module "gke" {
   # Regional/multi-zone: us-central1-a kept hitting ZONE_RESOURCE_POOL_EXHAUSTED
   # (e2-standard-2/4) and -c stocked out earlier — spread nodes across -b and -f
   # so node creation isn't pinned to one capacity-starved zone. Control plane is
-  # regional (us-central1); Cloud SQL/Memorystore reachable via PSA regardless.
+  # regional (us-central1); Cloud SQL reachable via PSA regardless.
   regional = true
   zones    = ["us-central1-b", "us-central1-f"]
 
@@ -90,22 +90,6 @@ module "cloud_sql" {
   # must start with a lowercase letter). The self-link carries the project ID.
   private_network    = module.vpc.network_self_link
   allocated_ip_range = module.vpc.psa_range_name
-
-  depends_on = [module.vpc]
-}
-
-#  BASIC tier, 1 GiB.
-module "memorystore" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=gcp/tf-hosted-modules/tf-dt-memorystore/v1.0.0"
-
-  project_id     = var.gcp_project_id
-  env_name       = var.env_id
-  region         = var.region
-  tier           = "BASIC"
-  memory_size_gb = 1
-
-  network           = module.vpc.network_self_link
-  reserved_ip_range = module.vpc.psa_range_name
 
   depends_on = [module.vpc]
 }

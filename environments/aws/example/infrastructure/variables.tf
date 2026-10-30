@@ -54,14 +54,14 @@ variable "env_additional_id" {
 }
 
 variable "availability_zone_name" {
-  description = "For One Zone systems, specify the AWS Availability Zone in which to create the EKS cluster and EFS."
+  description = "For One Zone systems, specify the AWS Availability Zone in which to create the EKS cluster."
   type        = string
 }
 
 variable "k8s_namespace" {
   description = "Kubernetes namespace for the application"
   type        = string
-  default     = "match"
+  default     = "snicketlabs"
 }
 
 variable "external_domain" {
@@ -177,6 +177,25 @@ variable "snicket_labs_remote_lb_access" {
     Set this to false only once you have agreed another support route with us —
     with no way in, we cannot diagnose a failing environment for you.
   DESC
+  type        = bool
+  default     = true
+}
+
+
+variable "kubernetes_version" {
+  description = "EKS control plane version. Set here so the cluster stays on a version you chose rather than moving with the tf-dt-eks module's default. EKS upgrades one minor version at a time."
+  type        = string
+  default     = "1.36"
+}
+
+variable "ascp_addon_version" {
+  description = "AWS Secrets Store CSI Driver Provider (ASCP) EKS add-on version. Unlike the other add-ons this one does not float to the latest, so it is set explicitly."
+  type        = string
+  default     = "v3.1.3-eksbuild.1"
+}
+
+variable "create_compute_dependent_addons" {
+  description = "Create the metrics-server and aws-efs-csi-driver EKS add-ons. Both are Deployments that Terraform waits on until they are healthy, so the stage-1 apply sets this to false and stage 2 creates them. Leave at true otherwise."
   type        = bool
   default     = true
 }
