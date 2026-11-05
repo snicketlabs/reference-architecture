@@ -6,7 +6,7 @@ status: 2
 
 # Snicket Labs Reference Architecture
 
-A Terraform-based reference architecture for deploying the Snicket Labs system. It provisions a complete environment - Kubernetes cluster, database, cache, object storage, shared storage, secrets, autoscaling, and ingress - onto which the platform helm chart is installed.
+A Terraform-based reference architecture for deploying the Snicket Labs system. It provisions a complete environment - Kubernetes cluster, database, object storage, secrets, autoscaling, and ingress - onto which the platform helm chart is installed.
 
 > **Important Note**: This reference architecture is intended as a **guide and starting point**. The modules are composable, so you may adapt them to work with an existing project, VPC, or cluster rather than creating everything from scratch.
 

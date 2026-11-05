@@ -8,7 +8,7 @@ status: 2
 
 ## Overview
 
-A Terraform-based reference architecture for deploying the Snicket Labs system on **Amazon EKS**. It provisions an AWS environment suitable for running the platform including Kubernetes cluster, database, cache, object storage, shared storage, secrets, autoscaling, and load balancing - onto which the platform helm chart is installed.
+A Terraform-based reference architecture for deploying the Snicket Labs system on **Amazon EKS**. It provisions an AWS environment suitable for running the platform including Kubernetes cluster, database, object storage, secrets, autoscaling, and load balancing - onto which the platform helm chart is installed.
 
 > **Important Note**: This reference architecture is intended as a **guide and starting point**. You may adapt it to work with your existing infrastructure, including existing EKS clusters, VPCs, or other AWS resources. The architecture is modular and can be customized to integrate with your current setup rather than creating everything from scratch.
 

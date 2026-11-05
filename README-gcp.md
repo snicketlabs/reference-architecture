@@ -8,7 +8,7 @@ status: 2
 
 ## Overview
 
-A Terraform-based reference architecture for deploying the Snicket Labs system on **Google Kubernetes Engine (GKE)**. It provisions a GCP environment suitable for running the platform including, Kubernetes cluster, database, cache, object storage, shared storage, secrets, autoscaling, and ingress with TLS - onto which the platform helm chart is installed.
+A Terraform-based reference architecture for deploying the Snicket Labs system on **Google Kubernetes Engine (GKE)**. It provisions a GCP environment suitable for running the platform including, Kubernetes cluster, database, object storage, secrets, autoscaling, and ingress with TLS - onto which the platform helm chart is installed.
 
 > **Important Note**: This reference architecture is intended as a **guide and starting point**. The modules are composable, so you may adapt them to work with an existing project, VPC, or cluster rather than creating everything from scratch.
 
@@ -19,7 +19,6 @@ A Terraform-based reference architecture for deploying the Snicket Labs system o
 - [Quick Start](#quick-start)
 - [Installing the platform (application layer)](#installing-the-platform-application-layer)
 - [Secrets (ESO + Workload Identity)](#secrets-eso--workload-identity)
-- [Shared storage (NFS provisioner vs Filestore)](#shared-storage-nfs-provisioner-vs-filestore)
 - [Ingress, TLS, and DNS](#ingress-tls-and-dns)
 - [Variable reference](#variable-reference)
 - [Teardown](#teardown)
@@ -37,7 +36,6 @@ Running `terraform apply` in `environments/gcp/<your-env>/infrastructure` stands
 | GKE cluster (regional, private nodes, Workload Identity, Gateway API) | `tf-dt-gke` | Managed Kubernetes |
 | Cloud SQL for PostgreSQL (private IP) | `tf-dt-cloud-sql` | Application database |
 | GCS bucket + HMAC key | `tf-dt-gcs-active-storage` | Active Storage object store (S3-interop) |
-| Shared RWX storage | `tf-dt-nfs-provisioner` | `ReadWriteMany` storage for the pipeline (internal/test default). For production, swap in `tf-dt-filestore` - see below |
 | Workload Identity GSAs | `tf-dt-workload-identity` | Keyless GCP authentication for the app and ESO |
 | App secrets in Secret Manager | `tf-dt-application-secrets` | API keys and owning-user password |
 | External Secrets Operator | `tf-dt-external-secrets` | Syncs Secret Manager into Kubernetes Secrets |
@@ -155,14 +153,14 @@ This is a **single apply** - there is no staged or tiered apply.
 The infrastructure apply does **not** install the application. After it completes:
 
 1. **Sync the secrets (ESO + Workload Identity)** into the `match` namespace. The Terraform modules create the *source* secrets in Secret Manager (DB, GCS-HMAC, API keys, owning-user password); the `eso-support` chart's `SecretStore` and `ExternalSecret`s materialise them as the Kubernetes Secrets the app expects; and two are created manually (`match-docker-secret`, `match-honeybadger-secret`). See [Secrets (ESO + Workload Identity)](#secrets-eso--workload-identity) below for full detail, including the gcloud commands.
-2. **Install the platform.** Install the platform helm chart into `match` with the GCP values: Postgres → `match-postgres-credentials`, Active Storage → GCS S3-interop endpoint + `match-s3-credentials`, shared storage → the `match-shared-storage-nfs` RWX class, `kedaAutoScaling.enabled`, `httpRoute.enabled` attaching to the `match-gateway`, and `gke.enabled` for the `/up` HealthCheckPolicy.
+2. **Install the platform.** Install the platform helm chart into `match` with the GCP values: Postgres → `match-postgres-credentials`, Active Storage → GCS S3-interop endpoint + `match-s3-credentials`, `kedaAutoScaling.enabled`, `httpRoute.enabled` attaching to the `match-gateway`, and `gke.enabled` for the `/up` HealthCheckPolicy.
 
 ```bash
 helm upgrade --install eso-support <eso-support chart> -n match -f <eso-values>
-helm upgrade --install match <helm-match chart>       -n match -f <match-values>
+helm upgrade --install match <platform chart>         -n match -f <match-values>
 ```
 
-Once the `helm-match` `HTTPRoute` exists, external-dns writes the DNS record and the Gateway routes traffic.
+Once the platform chart's `HTTPRoute` exists, external-dns writes the DNS record and the Gateway routes traffic.
 
 
 ## Secrets (ESO + Workload Identity)
@@ -195,82 +193,6 @@ Two secrets must be created by hand in Secret Manager (plain string values):
    printf '%s' "$SECRET_API_KEY" | gcloud secrets create match-honeybadger-secret \
      --project <your-project-id> --data-file=-
    ```
-
-## Shared storage (NFS provisioner vs Filestore)
-
-The ingest pipeline needs a `ReadWriteMany` (RWX) volume that several pods mount at once - the `helm-match` chart claims it as `match-shared-storage`. This reference architecture offers **two ways** to back that claim. Both present the same `match-shared-storage` RWX claim to the chart, so switching between them does not change the application configuration - only the infrastructure module differs.
-
-### Which one to choose
-
-| | **NFS provisioner** (`tf-dt-nfs-provisioner`) | **Filestore** (`tf-dt-filestore`) |
-|---|---|---|
-| What it is | A single in-cluster NFS server pod backed by a GKE block disk | Managed GCP Filestore (a hosted NFS service) |
-| Availability | Single point of failure - if the pod or its node is lost, the mount is unavailable until it reschedules | Managed and SLA-backed; no in-cluster server to lose |
-| Cost | Low - just the backing disk (e.g. a 150 GiB `standard-rwo` PD) | Higher - BASIC_HDD has a **1 TiB minimum** (around $200/month) |
-| Setup | Works out of the box; default in the example env | Needs the **GKE Filestore CSI driver addon** enabled on the cluster |
-| Default in repo | **Yes** - wired into `environments/gcp/example` | Opt-in - swap it in for production |
-
-**Use the NFS provisioner for** internal, test, demo, and bare-metal-style environments - anywhere a single-point-of-failure shared volume is acceptable and you want to keep cost low. This is the committed default.
-
-**Use Filestore for** production and any environment that needs a resilient, SLA-backed shared filesystem. It is opt-in because of the 1 TiB minimum spend and the CSI driver requirement, so it is left commented out in the example env rather than provisioned by default.
-
-> **Note:** Both options are recommendations and starting points, as elsewhere in this reference architecture. If you already run a shared filesystem (an existing Filestore instance, a third-party NFS server, etc.), you can point the `match-shared-storage` claim at your own RWX StorageClass instead.
-
-### Using the NFS provisioner (default)
-
-This is the block already present in `environments/gcp/example/infrastructure/main.tf`:
-
-```hcl
-module "nfs_provisioner" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=generic/tf-hosted-modules/tf-dt-nfs-provisioner/v1.0.0"
-
-  # Pinned ClusterIP must sit in the GKE services range and be high enough to
-  # avoid colliding with auto-assigned ClusterIPs (e.g. kube-dns).
-  service_cluster_ip = "10.8.15.250"
-
-  # GKE's default RWO StorageClass backs the NFS server's disk.
-  backing_storage_class = "standard-rwo"
-  backing_disk_size     = "150Gi"
-  storage_class_name    = "match-shared-storage-nfs"
-
-  depends_on = [module.gke]
-}
-```
-
-The chart's `storage.sharedStorage` claim must fit under `backing_disk_size`, so bump the backing disk for anything beyond a smoke test. The corresponding platform values are:
-
-```yaml
-storage:
-  sharedStorage:
-    enabled: true
-    claimName: match-shared-storage
-    storageClassName: match-shared-storage-nfs
-    size: 150Gi   # must fit under the provisioner's backing_disk_size
-```
-
-### Switching to Filestore (production)
-
-To use Filestore instead, comment out the `nfs_provisioner` module, enable the Filestore CSI driver addon on the GKE cluster, and add the `tf-dt-filestore` module - for example:
-
-```hcl
-module "filestore" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=gcp/tf-hosted-modules/tf-dt-filestore/<version>"
-
-  project_id         = var.gcp_project_id
-  env_name           = var.env_id
-  location           = var.zone
-  tier               = "BASIC_HDD"   # 1 TiB minimum
-  capacity_gb        = 1024
-  network            = module.vpc.network_self_link
-  storage_class_name = "match-shared-storage-nfs"
-
-  depends_on = [module.gke]
-}
-```
-
-Then point the platform values at the same `match-shared-storage-nfs` StorageClass - the `claimName` (`match-shared-storage`) is unchanged.
-
-> **Permissions gotcha:** Filestore has no per-export gid knob (unlike the NFS provisioner), so pods must write as nonroot via `podSecurityContext.fsGroup: 65532` rather than relying on a matching export gid. Confirm the app can write to `/app/storage` on first deploy.
 
 ## Ingress, TLS, and DNS
 
@@ -314,7 +236,7 @@ For sizing guidance (machine types, Cloud SQL tiers), see [Deployment Sizing Opt
 
 `terraform destroy` works, with a few GCP quirks worth documenting for a *used* cluster:
 
-1. **Operator Helm releases** can hang on uninstall due to finalizer deadlocks. Before destroy, `terraform state rm` the operator releases (cert-manager, external-secrets, keda) - they are removed with the cluster anyway. Keep `gateway_tls` in state (graceful Gateway removal cleans up the LB and NEGs) and `nfs_provisioner` (which reclaims its disk).
+1. **Operator Helm releases** can hang on uninstall due to finalizer deadlocks. Before destroy, `terraform state rm` the operator releases (cert-manager, external-secrets, keda) - they are removed with the cluster anyway. Keep `gateway_tls` in state - graceful Gateway removal cleans up the LB and NEGs.
 2. **PSA peering** reports "producer services still using" for a few minutes after Cloud SQL is deleted. Run `terraform state rm module.vpc.google_service_networking_connection.psa` and `gcloud compute networks peerings delete servicenetworking-googleapis-com --network=<env>`, then `terraform destroy -target=module.vpc`.
 3. **Dynamically-provisioned PVs** can orphan as `pvc-*` disks - sweep them with `gcloud compute disks list` / `delete`.
 
