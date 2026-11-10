@@ -53,6 +53,16 @@ variable "env_additional_id" {
   }
 }
 
+variable "env_class" {
+  description = "What this environment is for, emitted as the as-env-class tag: poc (proof of concept or demo), customer or internal."
+  type        = string
+  default     = "customer"
+  validation {
+    condition     = contains(["poc", "customer", "internal"], var.env_class)
+    error_message = "env_class must be one of 'poc', 'customer', 'internal'."
+  }
+}
+
 variable "availability_zone_name" {
   description = "For One Zone systems, specify the AWS Availability Zone in which to create the EKS cluster."
   type        = string
@@ -186,6 +196,12 @@ variable "kubernetes_version" {
   description = "EKS control plane version. Set here so the cluster stays on a version you chose rather than moving with the tf-dt-eks module's default. EKS upgrades one minor version at a time."
   type        = string
   default     = "1.36"
+}
+
+variable "enabled_log_types" {
+  description = "EKS control-plane log types sent to CloudWatch. Audit is most of their volume and ingestion cost; [\"authenticator\"] keeps access debugging for a fraction of it."
+  type        = list(string)
+  default     = ["api", "audit", "authenticator", "scheduler"]
 }
 
 variable "ascp_addon_version" {
