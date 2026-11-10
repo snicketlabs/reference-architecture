@@ -48,11 +48,12 @@ locals {
 }
 
 module "label" {
-  source            = "git::https://github.com/ad-signalio/terraform-utils.git?ref=generic/tf-hosted-modules/tf-dt-naming/v1.0.0"
+  source            = "git::https://github.com/ad-signalio/terraform-utils.git?ref=generic/tf-hosted-modules/tf-dt-naming/v1.0.1"
   env_use           = var.env_use
   env_id            = var.env_id
   env_additional_id = var.env_additional_id
   env_region        = var.env_region
+  env_class         = var.env_class
 }
 
 locals {
@@ -72,12 +73,13 @@ module "vpc" {
 }
 
 module "eks" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks/v1.0.21"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks/v1.0.23"
 
   env_name           = module.label.env_name
   tags               = merge(module.label.tags, local.prm_tags)
   kubernetes_version = var.kubernetes_version
   ascp_addon_version = var.ascp_addon_version
+  enabled_log_types  = var.enabled_log_types
 
   # False for the stage-1 apply only: these addons are Deployments terraform
   # waits on, and they need compute to become healthy. See the Quick Start in
