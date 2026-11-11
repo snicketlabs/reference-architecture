@@ -39,43 +39,6 @@ module "gke" {
 }
 
 
-module "nfs_provisioner" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=generic/tf-hosted-modules/tf-dt-nfs-provisioner/v1.0.0"
-
-  # Pinned ClusterIP must sit in the GKE services range (10.8.0.0/20) and be
-  # high enough to avoid colliding with auto-assigned ClusterIPs (e.g. kube-dns).
-  service_cluster_ip = "10.8.15.250"
-
-  # GKE's default RWO StorageClass backs the NFS server's disk.
-  # Must exceed the chart's storage.sharedStorage.size (default 100Gi) plus
-  # headroom, or the match-shared-storage RWX claim can't be provisioned and
-  # every app pod hangs on an unbound PVC.
-  backing_storage_class = "standard-rwo"
-  backing_disk_size     = "150Gi"
-  storage_class_name    = "match-shared-storage-nfs"
-
-  depends_on = [module.gke]
-}
-
-
-# Production-tier shared storage — OPT-IN alternative to module.nfs_provisioner
-# above. The NFS provisioner is single-pod
-# managed GCP Filestore (tf-dt-filestore) is SLA-backed RWX for production. To use
-# it: comment out module.nfs_provisioner above, uncomment this, enable the GKE
-# Filestore CSI driver addon, set storage.sharedStorage.claimName=match-shared-storage
-# + podSecurityContext.fsGroup=65532 in match-values. 
-# module "filestore" {
-#   source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=gcp/tf-hosted-modules/tf-dt-filestore/v1.0.0"
-#
-#   project_id = var.gcp_project_id
-#   name       = "${var.env_id}-fs"
-#   location   = var.zone               # BASIC tiers are zonal
-#   network    = module.vpc.network_name
-#   namespace  = "match"                # creates the match-shared-storage RWX PVC
-#
-#   depends_on = [module.gke]
-# }
-
 module "cloud_sql" {
   source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=gcp/tf-hosted-modules/tf-dt-cloud-sql/v1.0.0"
 
