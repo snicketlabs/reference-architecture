@@ -85,9 +85,9 @@ variable "external_domain" {
 }
 
 variable "rds_instance_class" {
-  description = "RDS instance class for the PostgreSQL database"
+  description = "RDS instance class for the PostgreSQL database. See docs/deployment-sizing.md for the ladder."
   type        = string
-  default     = "db.t3.small"
+  default     = "db.m5.xlarge"
   validation {
     condition     = can(regex("^db\\.[a-z0-9]+\\.[a-z0-9]+$", var.rds_instance_class))
     error_message = "rds_instance_class must be a valid RDS instance class (e.g., db.t3.small, db.r5.large)."
@@ -103,7 +103,7 @@ variable "rds_allocated_storage" {
 variable "rds_max_allocated_storage" {
   description = "Maximum storage in GB that RDS autoscaling can grow to"
   type        = number
-  default     = 100
+  default     = 350
 }
 
 variable "admin_access_sso_permission_set_names" {
