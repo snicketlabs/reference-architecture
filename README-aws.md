@@ -25,6 +25,7 @@ A Terraform-based reference architecture for deploying the Snicket Labs system o
 - [Terraform State](./docs/terraform-state.md)
 - [Deployment Sizing Options](./docs/deployment-sizing.md)
 - [Event Driven Autoscaling (KEDA)](./docs/keda.md)
+- [Assisted self-managed deployment](https://portal.snicketlabs.io/docs/platform/distr)
 
 ## Architecture Overview
 
@@ -140,7 +141,7 @@ Recommended actions:
 3. **Configure variables**
    ```bash
    # Edit the  an example .tfvars file with your specific values
-   cp ../../example/<size>.tfvars your-company-name.tfvars
+   cp ../../example/example.tfvars your-company-name.tfvars
    vim your-company-name.tfvars
    # Edit the backend.tf to use your state bucket and statefile
    vim backend.tf
