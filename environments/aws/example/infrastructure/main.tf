@@ -136,7 +136,7 @@ module "auto_mode_storage_class" {
 }
 
 module "iam_role_for_service_account" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-iam-roles/v1.0.5"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-iam-roles/v1.0.6"
 
   s3_bucket_name             = "${local.cluster_name}-primary"
   env_name                   = module.label.env_name
