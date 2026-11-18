@@ -114,6 +114,11 @@ output "grafana_cloudwatch_role_arn" {
   value       = module.iam_role_for_service_account.grafana_cloudwatch_role_arn
 }
 
+output "grafana_role_arn" {
+  description = "Grafana's own IRSA role, which carries nothing but the right to assume the CloudWatch role above. -> kube-prometheus-stack.grafana.serviceAccount.annotations"
+  value       = module.iam_role_for_service_account.grafana_role_arn
+}
+
 output "database_name" {
   description = "-> postgres.database"
   value       = module.rds-postgres.db_name
