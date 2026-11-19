@@ -7,7 +7,7 @@ module "vpc" {
 }
 
 module "gke" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=gcp/tf-hosted-modules/tf-dt-gke/v1.0.0"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=gcp/tf-hosted-modules/tf-dt-gke/v1.0.1"
 
   project_id   = var.gcp_project_id
   cluster_name = var.env_id
@@ -26,13 +26,35 @@ module "gke" {
 
   master_ipv4_cidr_block = "172.16.0.0/28"
 
-  # e2-standard-4 (4 vCPU, ~3.92 allocatable): the KEDA ingest scaledjobs
-  # (process-qc, fingerprint, etc.) request cpu:2 from the chart defaults, which
-  # can never fit an e2-standard-2 (~1.93 allocatable)
-
+  # Sizing -- see docs/deployment-sizing.md. Node counts are per zone.
+  #
+  # Default pool: e2-standard-4 (4 vCPU, ~3.92 allocatable) is the practical
+  # minimum. The ingest scaledjobs request cpu:2, which can never fit an
+  # e2-standard-2 (~1.93 allocatable). It autoscales, so compute follows demand.
   machine_type   = "e2-standard-4"
   min_node_count = 1
   max_node_count = 2
+
+  # Large pool: most MatchCore tiers request more CPU than one e2-standard-4
+  # can allocate (4 to 8 vCPU, and 12 for j2k-uhd), and a pod never spans nodes.
+  # e2-standard-16 (~15.9 allocatable) fits every tier. It scales from zero.
+  #
+  # The taint keeps everything else off it. Untainted, system pods scaled it up
+  # at cluster creation and stayed on it afterwards, and the autoscaler removed
+  # default nodes before it. Only pods that tolerate the taint can use it, so
+  # the platform chart's large MatchCore tiers need a matching toleration --
+  # see "Installing the platform" in README-gcp.md.
+  additional_node_pools = [
+    {
+      name           = "large"
+      machine_type   = "e2-standard-16"
+      min_node_count = 0
+      max_node_count = 1
+      taints = [
+        { key = "dedicated", value = "large", effect = "NO_SCHEDULE" }
+      ]
+    }
+  ]
 
 
   gateway_api_channel = "CHANNEL_STANDARD"
@@ -46,7 +68,21 @@ module "cloud_sql" {
   env_name   = var.env_id
   region     = var.region
   zone       = var.zone
-  tier       = "db-custom-1-3840" # smallest tier that supports private IP (db-custom-1-3840 = 1 vCPU, 3.75 GiB RAM)
+
+  # Database. This is the one value that genuinely has to be chosen per
+  # deployment: content, library size, comparison types and which features you
+  # use all load it differently. Start here and move up if you need to --
+  # docs/deployment-sizing.md carries the ladder.
+  #
+  #   db-custom-1-3840     1 vCPU / 3.75 GiB  internal and PoC only
+  #   db-custom-4-16384    4 vCPU / 16 GiB    default starting position
+  #   db-custom-8-32768    8 vCPU / 32 GiB    first step up
+  #   db-custom-16-65536  16 vCPU / 64 GiB    headroom for a large established library
+  tier = "db-custom-4-16384"
+
+  # Storage autoscales with no upper limit, and never shrinks -- so start low.
+  disk_size       = 20
+  disk_autoresize = true
 
   # self_link (ID-form) not network_id: the VPC runs on the project NUMBER, so
   # network_id is "projects/778387110885/..." which Cloud SQL rejects (project id

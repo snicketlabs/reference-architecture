@@ -172,6 +172,52 @@ The infrastructure apply does **not** install the application. After it complete
    | `s3.compatibleEndpoint` | `https://storage.googleapis.com`, with `compatibleCredentialsSecret: s3-credentials` |
    | `metrics.enabled` | `false` - see the note above |
    | `imagePullSecrets` | `dockerconfig` for a plain Helm install. Leave it **unset** if deploying through Distr, which injects its own pull secret |
+   | `scaledJobs.<tier>.tolerations` | see below |
+
+   The `large` node pool is tainted so that only work that needs it lands there.
+   These fingerprinting tiers request more CPU than a `default` node can allocate,
+   so give each one the matching toleration. Without it those jobs stay `Pending`.
+   If you change the taint in `main.tf`, change this toleration to match.
+
+   ```yaml
+   scaledJobs:
+     tiff-sequence-matchcore:
+       tolerations:
+         - key: dedicated
+           operator: Equal
+           value: large
+           effect: NoSchedule
+     hd-matchcore:
+       tolerations:
+         - key: dedicated
+           operator: Equal
+           value: large
+           effect: NoSchedule
+     interlaced-matchcore:
+       tolerations:
+         - key: dedicated
+           operator: Equal
+           value: large
+           effect: NoSchedule
+     uhd-matchcore:
+       tolerations:
+         - key: dedicated
+           operator: Equal
+           value: large
+           effect: NoSchedule
+     j2k-hd-matchcore:
+       tolerations:
+         - key: dedicated
+           operator: Equal
+           value: large
+           effect: NoSchedule
+     j2k-uhd-matchcore:
+       tolerations:
+         - key: dedicated
+           operator: Equal
+           value: large
+           effect: NoSchedule
+   ```
 
 ```bash
 helm upgrade --install eso-support <secrets-configuration-gcp chart> -n match -f <eso-values>

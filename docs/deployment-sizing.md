@@ -1,9 +1,3 @@
-<!---
-title: Deployment Sizing Options
-folder: "Technical Documentation"
-status: 2
--->
-
 # Deployment Sizing Options
 
 There are no small, medium and large deployment profiles. There used to be, and
@@ -62,28 +56,47 @@ a rung.
 
 Database CPU sustained near its limit says the same thing more directly.
 
+## GCP: the database
+
+The default is set in the `cloud_sql` module block in
+`environments/gcp/example/infrastructure/main.tf`. Copy the environment and edit
+the `tier` there.
+
+| Machine tier | vCPU / RAM | When |
+|---|---|---|
+| `db-custom-1-3840` | 1 / 3.75 GiB | Internal and proof-of-concept only. Not for production or production sized comparisons. |
+| **`db-custom-4-16384`** | **4 / 16 GiB** | **Default starting position.** |
+| `db-custom-8-32768` | 8 / 32 GiB | First step up. |
+| `db-custom-16-65536` | 16 / 64 GiB | Headroom for a large, established library. |
+
+The rungs mirror the AWS ladder vCPU for vCPU. Storage starts at
+`disk_size = 20` (GiB) with `disk_autoresize = true`. Cloud SQL storage never
+shrinks, and there is no upper limit on automatic growth.
+
+The same symptoms described under [Knowing when to move](#knowing-when-to-move)
+apply.
+
+## GCP: compute
+
+On AWS the cluster picks an instance type for each workload. On GKE each node
+pool has one fixed machine type, so the reference architecture runs two pools,
+both autoscaling, set in the `gke` module block in the same `main.tf`. Node
+counts are **per zone** for a regional cluster.
+
+| Pool | Machine type | Nodes per zone | Why |
+|---|---|---|---|
+| `default` | `e2-standard-4` (4 vCPU / 16 GiB) | 1 to 2 | Most workers. The practical minimum: ingest jobs request 2 vCPU, which cannot be scheduled on an `e2-standard-2` (roughly 1.93 vCPU allocatable). |
+| `large` | `e2-standard-16` (16 vCPU / 64 GiB) | 0 to 1 | Fingerprinting jobs whose CPU request is larger than one `default` node can allocate, up to 12 vCPU for the heaviest. Scales up from zero when such a job is waiting, and back to zero once idle. |
+
+A pod never spans nodes, so without the `large` pool those jobs stay pending
+however far the `default` pool scales.
+
+Raise `max_node_count` on either pool if you raise the throughput values above
+and want the capacity to follow.
+
+The `large` pool is tainted so nothing else lands on it and it can scale back to
+zero promptly. The fingerprinting tiers that need it carry a matching toleration
+in the chart values; see "Installing the platform" in `README-gcp.md`.
+
 Work with Snicket Labs Technical Services to understand your individual system
 needs.
-
-## GCP
-
-GCP sizing is set in the module blocks in
-`environments/gcp/<your-env>/infrastructure/main.tf` (the `cloud_sql` and `gke`
-modules).
-
-> **GCP still carries the old tier tables.** The committed `example` environment
-> ships at the Internal / test tier, and the `{small,medium,large}.tfvars` files
-> there are placeholders pending dedicated GCP sizing variables. Bringing GCP in
-> line with the single-default approach above is tracked separately. Until then,
-> treat the table below as the existing starting points and apply them by editing
-> the module blocks in `main.tf` directly.
-
-| Tier | GKE node `machine_type` | Cloud SQL `tier` | Cloud SQL `disk_size` → autoresize limit |
-|---|---|---|---|
-| Internal / test (example default) | `e2-standard-4` (4 vCPU / 16 GiB) | `db-custom-1-3840` (1 vCPU / 3.75 GiB) | 20 GiB |
-| Small | `e2-standard-4` (4 vCPU / 16 GiB) | `db-custom-4-16384` (4 vCPU / 16 GiB) | 20 → 100 GiB |
-| Medium | `e2-standard-8` (8 vCPU / 32 GiB) | `db-custom-16-65536` (16 vCPU / 64 GiB) | 50 → 200 GiB |
-| Large | `e2-standard-16` (16 vCPU / 64 GiB) | `db-custom-16-65536` (16 vCPU / 64 GiB) | 100 → 350 GiB |
-
-**Compute notes:**
-- `e2-standard-4` is the practical minimum machine type. The KEDA ingest scaledjobs request around 2 vCPU (and the fingerprinter init around 3), which cannot be scheduled on a 2-vCPU node (`e2-standard-2` has roughly 1.93 allocatable). Node counts in `tf-dt-gke` are **per zone** for a regional cluster.
