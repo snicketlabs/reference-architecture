@@ -217,7 +217,7 @@ The reference implementation use AWS Secrets Manager with the [AWS ASCP Provider
 The current infrastructure has secret creation "baked in" at different stages.
 
 This will:
-- [Create an IAM policy](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-eks/iam.tf) to allow access to specific secrets (`match-docker-secret` and secrets beginning with your chosen secret naming convention)
+- [Create an IAM policy](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-eks/iam.tf) to allow access to specific secrets (`snicketlabs-docker-secret`, `snicketlabs-honeybadger-secret`, and secrets beginning with your chosen secret naming convention)
 - Inject the [RDS config details](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-rds-pg/main.tf) into a secret in AWS Secrets Manager after creation
 - Create and inject [Owning User Credentials](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-application-secrets/main.tf) (the credentials you will log in to the product with). The user name will be the email you specify in the `owning_user_email` variable. Password will be auto generated and stored.
 - Create and inject [API secrets](https://github.com/ad-signalio/terraform-utils/blob/main/aws/tf-hosted-modules/tf-dt-application-secrets/main.tf) (necessary for the code to run) into a secret in AWS Secrets Manager after creation
@@ -240,11 +240,11 @@ See the [chart source and README](https://github.com/snicketlabs/helm-charts/tre
 
 You **must** manually create both the honeybadger and docker secrets in AWS Secrets Manager. 
 
-1. Creating a secret in AWS Secrets Manager with your docker auth token called `match-docker-secret`
+1. Creating a secret in AWS Secrets Manager with your docker auth token called `snicketlabs-docker-secret`
 
 ```bash
 aws secretsmanager create-secret \
---name match-docker-secret \
+--name snicketlabs-docker-secret \
 --description "Docker Hub credentials (dockerconfigjson)" \
 --region ${your-region} \
 --add-replica-regions Region=${your-replicate-region} \
@@ -254,12 +254,27 @@ aws secretsmanager create-secret \
 
 ```bash
 aws secretsmanager create-secret \
---name match-honeybadger-secret \
+--name snicketlabs-honeybadger-secret \
 --description "Honeybadger api secret" \
 --region ${your-region} \
 --add-replica-regions Region=${your-replicate-region} \
 --secret-string $SECRET_API_KEY
 ```
+
+The secret sync turns these, and the secrets Terraform creates, into the
+Kubernetes Secrets the platform chart reads: `api-secrets`,
+`owning-user-credentials`, `postgres-credentials`, `dockerconfig` and
+`honeybadger-api-key`.
+
+> **Applied an earlier version of this example?** It named these
+> `match-docker-secret` and `match-honeybadger-secret`, and synced into
+> `match-`-prefixed Kubernetes Secrets. Before applying this version, either
+> create copies of the two hand-made secrets under the new names, or keep the
+> old names by setting `hand_created_secret_names` (on `module.eks`) and
+> `docker_secret_name`, `honeybadger_secret_name` and the `k8s_*_secret_name`
+> inputs (on `module.secret_provider_classes`) back to their `match-` values.
+> Either way, check that your platform chart values point at the Secret names
+> you end up with.
 
 ## What this reference architecture does NOT include
 
