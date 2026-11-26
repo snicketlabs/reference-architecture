@@ -81,6 +81,11 @@ module "eks" {
   ascp_addon_version = var.ascp_addon_version
   enabled_log_types  = var.enabled_log_types
 
+  # The Secrets Manager entries you create by hand (see README-aws.md). The
+  # secret sync's IAM role may read only these, so they must match the names
+  # passed to secret_provider_classes below.
+  hand_created_secret_names = ["snicketlabs-docker-secret", "snicketlabs-honeybadger-secret"]
+
   # False for the stage-1 apply only: these addons are Deployments terraform
   # waits on, and they need compute to become healthy. See the Quick Start in
   # README-aws.md.
@@ -186,7 +191,7 @@ module "application-secrets" {
 }
 
 module "secret_provider_classes" {
-  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks-secret-provider-classes/v1.0.4"
+  source = "git::https://github.com/ad-signalio/terraform-utils.git?ref=aws/tf-hosted-modules/tf-dt-eks-secret-provider-classes/v1.0.5"
 
   depends_on = [module.eks]
   enabled    = true
@@ -198,6 +203,16 @@ module "secret_provider_classes" {
 
   cluster_name          = module.eks.eks_cluster_name
   secret_store_role_arn = module.eks.secrets_csi_irsa_role_arn
+
+  # Kubernetes Secret names the platform chart consumes. Namespaced, so no
+  # match- prefix. These are the names the chart README uses.
+  k8s_api_secret_name         = "api-secrets"
+  k8s_owning_user_secret_name = "owning-user-credentials"
+  k8s_rds_pg_secret_name      = "postgres-credentials"
+
+  # The hand-created Secrets Manager entries; tf-dt-eks grants access by name.
+  docker_secret_name      = "snicketlabs-docker-secret"
+  honeybadger_secret_name = "snicketlabs-honeybadger-secret"
 
   api_secret_name    = module.application-secrets.api_secret_name
   user_secret_name   = module.application-secrets.user_secret_name
